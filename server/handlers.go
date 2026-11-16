@@ -39,7 +39,7 @@ var (
 
 func optionsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"protocols":      supportedProtocols,
+		"protocols":      availableProtocols(),
 		"dataProviders":  dataProviders,
 		"defaultOptions": defaults,
 	})
