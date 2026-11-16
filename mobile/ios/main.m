@@ -234,9 +234,9 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
     if ([self isAlive]) {
         return YES;
     }
-    NSString *binary = [[NSBundle mainBundle] pathForAuxiliaryExecutable:@"nexttrace"];
+    NSString *binary = [[NSBundle mainBundle] pathForAuxiliaryExecutable:@"nexttrace-helper"];
     if (binary == nil || ![[NSFileManager defaultManager] isExecutableFileAtPath:binary]) {
-        if (error) *error = @"nexttrace helper is missing from the app bundle";
+        if (error) *error = @"nexttrace-helper is missing from the app bundle";
         return NO;
     }
 

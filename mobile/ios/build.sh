@@ -53,10 +53,10 @@ LD_FLAGS="-X github.com/nxtrace/NTrace-core/config.Version=${BUILD_VERSION} \
   cd "$ROOT"
   CGO_ENABLED=1 GOOS=ios GOARCH=arm64 \
     CC="$WORK/clangwrap" \
-    go build -trimpath -ldflags "$LD_FLAGS" -o "$APP/nexttrace" .
+    go build -trimpath -ldflags "$LD_FLAGS" -o "$APP/nexttrace-helper" .
 )
-file "$APP/nexttrace"
-otool -L "$APP/nexttrace"
+file "$APP/nexttrace-helper"
+otool -L "$APP/nexttrace-helper"
 
 # --- Shell app ---------------------------------------------------------------
 "$CLANG" -arch arm64 -isysroot "$SDK" -miphoneos-version-min="$MIN_IOS" \
@@ -73,9 +73,13 @@ cp "$HERE"/icons/*.png "$APP/"
 
 # --- Sign and package --------------------------------------------------------
 # Ad-hoc signatures: TrollStore re-signs on install but keeps the entitlements.
-codesign --force --sign - --entitlements "$HERE/helper.entitlements" "$APP/nexttrace"
+codesign --force --sign - --entitlements "$HERE/helper.entitlements" "$APP/nexttrace-helper"
 codesign --force --sign - --entitlements "$HERE/app.entitlements" "$APP"
 codesign -d --entitlements - "$APP" 2>&1 | head -n 20
 
 (cd "$WORK" && zip -qry "$OUT/NextTrace-ios.tipa" Payload)
 ls -l "$OUT/NextTrace-ios.tipa"
+# Both executables must be in the package (their names must not differ only by
+# case: the build host's filesystem is case-insensitive).
+unzip -l "$OUT/NextTrace-ios.tipa" | grep -E 'NextTrace\.app/(NextTrace|nexttrace-helper)$'
+test "$(unzip -l "$OUT/NextTrace-ios.tipa" | grep -cE 'NextTrace\.app/(NextTrace|nexttrace-helper)$')" -eq 2
