@@ -1,0 +1,8 @@
+.gradle/
+build/
+app/build/
+local.properties
+# The NextTrace helper binary is built by CI (see .github/workflows/mobile-android.yml).
+app/src/main/jniLibs/
+*.keystore
+*.p12

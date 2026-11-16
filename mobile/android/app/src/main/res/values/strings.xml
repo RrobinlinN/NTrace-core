@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NextTrace</string>
+    <string name="status_starting">Starting NextTrace…</string>
+    <string name="status_failed">NextTrace failed to start. Tap to retry.</string>
+    <string name="status_missing_binary">NextTrace binary is missing from the app package.</string>
+</resources>

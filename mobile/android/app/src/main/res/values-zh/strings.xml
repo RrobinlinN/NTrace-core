@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NextTrace</string>
+    <string name="status_starting">正在启动 NextTrace…</string>
+    <string name="status_failed">NextTrace 启动失败，点击重试。</string>
+    <string name="status_missing_binary">安装包内缺少 NextTrace 可执行文件。</string>
+</resources>

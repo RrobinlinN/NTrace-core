@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+}
+
+def envOr = { String name, String fallback ->
+    def value = System.getenv(name)
+    (value != null && !value.isEmpty()) ? value : fallback
+}
+
+// CI provides a fixed PKCS#12 keystore so successive builds can be installed
+// over each other. Without it the build falls back to the debug key.
+def signingKeystore = System.getenv('SIGNING_KEYSTORE_FILE')
+def hasSigningKeystore = signingKeystore != null && !signingKeystore.isEmpty()
+
+android {
+    namespace 'com.github.rrobinlinn.nexttrace'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.github.rrobinlinn.nexttrace'
+        minSdk 26
+        // Stay on API 29: API 30+ blocks binding NETLINK_ROUTE sockets, which
+        // Go's net.Interfaces() relies on.
+        targetSdk 29
+        versionCode envOr('APP_VERSION_CODE', '1') as int
+        versionName envOr('APP_VERSION_NAME', '0.0.0-dev')
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (hasSigningKeystore) {
+                storeFile file(signingKeystore)
+                storeType 'pkcs12'
+                storePassword System.getenv('SIGNING_STORE_PASSWORD')
+                keyAlias envOr('SIGNING_KEY_ALIAS', 'nexttrace')
+                keyPassword System.getenv('SIGNING_STORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig hasSigningKeystore ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // libnexttrace.so is the NextTrace executable, not a shared library.
+            // It must be extracted to nativeLibraryDir so the app may exec it,
+            // and must not be touched by the NDK strip step.
+            useLegacyPackaging true
+            keepDebugSymbols += '**/libnexttrace.so'
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
