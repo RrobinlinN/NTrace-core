@@ -32,7 +32,15 @@ type ICMPSpec struct {
 }
 
 func ListenPacket(network string, laddr string) (net.PacketConn, error) {
-	return net.ListenPacket(network, laddr)
+	conn, err := net.ListenPacket(network, laddr)
+	if err != nil {
+		// Without CAP_NET_RAW (e.g. a non-root Android app) fall back to an
+		// unprivileged ping socket when the kernel offers one.
+		if fallback, ok := listenUnprivilegedICMP(network, laddr, err); ok {
+			return fallback, nil
+		}
+	}
+	return conn, err
 }
 
 func (s *ICMPSpec) Close() {

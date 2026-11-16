@@ -17,7 +17,7 @@ func (s *UDPSpec) InitICMP() error {
 		network = "ip6:ipv6-icmp"
 	}
 
-	icmpConn, err := net.ListenPacket(network, s.SrcIP.String())
+	icmpConn, err := listenUDPErrorSource(s, network)
 	if err != nil {
 		return fmt.Errorf("(InitICMP) ListenPacket(%s, %s) failed: %w", network, s.SrcIP, err)
 	}

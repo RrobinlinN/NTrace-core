@@ -33,9 +33,16 @@ type UDPSpec struct {
 	udp6         *ipv6.PacketConn
 	hopLimitLock sync.Mutex
 	mtu          int
+	// unpriv is set when raw sockets are unavailable and probes go through
+	// per-probe UDP sockets instead (Linux/Android without CAP_NET_RAW).
+	unpriv *unprivUDP
 }
 
 func (s *UDPSpec) InitUDP() error {
+	if s.unpriv != nil {
+		return nil
+	}
+
 	network := "ip4:udp"
 	if s.IPVersion == 6 {
 		network = "ip6:udp"
@@ -197,6 +204,10 @@ func (s *UDPSpec) SendUDP(ctx context.Context, ipHdr ipLayer, udpHdr *layers.UDP
 	case <-ctx.Done():
 		return time.Time{}, context.Canceled
 	default:
+	}
+
+	if s.unpriv != nil {
+		return s.unpriv.send(ctx, ipHdr, udpHdr, payload)
 	}
 
 	if s.IPVersion == 4 {
