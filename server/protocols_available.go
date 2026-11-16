@@ -13,7 +13,7 @@ import (
 // mobile shell apps, which usually run without raw-socket privilege:
 //   - Linux/Android without CAP_NET_RAW: ICMP and UDP work through the
 //     unprivileged fallback, TCP still needs a raw socket.
-//   - iOS as the mobile user: only the datagram ICMP socket is available.
+//   - iOS: there is no libpcap, so only ICMP is implemented.
 //
 // Requests for other protocols are still accepted and fail with their own error.
 var availableProtocols = sync.OnceValue(func() []string {
@@ -28,9 +28,7 @@ var availableProtocols = sync.OnceValue(func() []string {
 			return []string{"icmp", "udp"}
 		}
 	case "ios":
-		if os.Geteuid() != 0 {
-			return []string{"icmp"}
-		}
+		return []string{"icmp"}
 	}
 	return supportedProtocols
 })

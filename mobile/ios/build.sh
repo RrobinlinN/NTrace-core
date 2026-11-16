@@ -27,7 +27,6 @@ case "$VERSION_NAME" in
 esac
 
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-MACSDK="$(xcrun --sdk macosx --show-sdk-path)"
 CLANG="$(xcrun --sdk iphoneos --find clang)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -43,40 +42,9 @@ exec "$CLANG" -arch arm64 -isysroot "$SDK" -miphoneos-version-min=$MIN_IOS "\$@"
 EOF
 chmod +x "$WORK/clangwrap"
 
-# NextTrace captures its own TCP/UDP probes through libpcap on Darwin. iOS
-# ships the library but the iPhoneOS SDK has no headers for it, so borrow the
-# (identical) headers from the macOS SDK.
-SHIM_INC="$WORK/include"
-SHIM_LIB="$WORK/lib"
-mkdir -p "$SHIM_INC" "$SHIM_LIB"
-CGO_CFLAGS_EXTRA=""
-CGO_LDFLAGS_EXTRA=""
-if [ ! -f "$SDK/usr/include/pcap.h" ]; then
-  echo "pcap headers: borrowing from the macOS SDK"
-  cp "$MACSDK"/usr/include/pcap*.h "$SHIM_INC/"
-  cp -R "$MACSDK/usr/include/pcap" "$SHIM_INC/"
-  if [ ! -f "$SDK/usr/include/net/bpf.h" ]; then
-    mkdir -p "$SHIM_INC/net"
-    cp "$MACSDK/usr/include/net/bpf.h" "$SHIM_INC/net/"
-  fi
-  CGO_CFLAGS_EXTRA="-I$SHIM_INC"
-fi
-if ls "$SDK"/usr/lib/libpcap*.tbd >/dev/null 2>&1; then
-  echo "libpcap: provided by the iPhoneOS SDK"
-  ls -l "$SDK"/usr/lib/libpcap*.tbd
-else
-  # No link stub in the SDK: derive one from the macOS stub. The library
-  # itself is loaded from the device at run time.
-  echo "libpcap: no stub in the iPhoneOS SDK, deriving one from the macOS SDK"
-  MAC_TBD="$MACSDK/usr/lib/libpcap.A.tbd"
-  [ -f "$MAC_TBD" ] || MAC_TBD="$MACSDK/usr/lib/libpcap.tbd"
-  sed -E 's/(arm64e?)-macos/\1-ios/g; s/x86_64-macos/x86_64-ios-simulator/g; s/(arm64e?|x86_64)-maccatalyst/\1-ios-simulator/g' \
-    "$MAC_TBD" > "$SHIM_LIB/libpcap.tbd"
-  head -n 12 "$SHIM_LIB/libpcap.tbd"
-  CGO_LDFLAGS_EXTRA="-L$SHIM_LIB"
-fi
-
 # --- Go helper ---------------------------------------------------------------
+# iOS has no libpcap, so the iOS build of NextTrace contains no pcap code and
+# links only system libraries (see trace/internal/probe_ios.go).
 LD_FLAGS="-X github.com/nxtrace/NTrace-core/config.Version=${BUILD_VERSION} \
           -X github.com/nxtrace/NTrace-core/config.BuildDate=${BUILD_DATE} \
           -X github.com/nxtrace/NTrace-core/config.CommitID=${COMMIT_SHA1} \
@@ -85,8 +53,6 @@ LD_FLAGS="-X github.com/nxtrace/NTrace-core/config.Version=${BUILD_VERSION} \
   cd "$ROOT"
   CGO_ENABLED=1 GOOS=ios GOARCH=arm64 \
     CC="$WORK/clangwrap" \
-    CGO_CFLAGS="$CGO_CFLAGS_EXTRA" \
-    CGO_LDFLAGS="$CGO_LDFLAGS_EXTRA" \
     go build -trimpath -ldflags "$LD_FLAGS" -o "$APP/nexttrace" .
 )
 file "$APP/nexttrace"

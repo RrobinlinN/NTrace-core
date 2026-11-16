@@ -4,10 +4,10 @@
 // started in deploy mode on a loopback port and its Web UI is shown in a
 // WKWebView, so probes originate from this device.
 //
-// TrollStore lets the app keep private entitlements, so the helper is spawned
-// as root (persona override). Root gives NextTrace raw sockets and BPF, which
-// its TCP and UDP modes need on Darwin. If the root spawn is refused the helper
-// runs as the mobile user, where only ICMP works.
+// TrollStore lets the app run outside the sandbox, which is what allows it to
+// spawn the bundled helper at all. The helper runs as the mobile user: iOS has
+// no libpcap, so NextTrace only does ICMP there, and its datagram ICMP socket
+// needs no privilege.
 
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
@@ -21,12 +21,6 @@
 #import <sys/wait.h>
 #import <unistd.h>
 
-// Private spawn attributes (libsystem_kernel); gated by com.apple.private.persona-mgmt.
-#define NT_POSIX_SPAWN_PERSONA_FLAGS_OVERRIDE 1
-extern int posix_spawnattr_set_persona_np(const posix_spawnattr_t *__restrict, uid_t, uint32_t);
-extern int posix_spawnattr_set_persona_uid_np(const posix_spawnattr_t *__restrict, uid_t);
-extern int posix_spawnattr_set_persona_gid_np(const posix_spawnattr_t *__restrict, uid_t);
-
 extern char **environ;
 
 static NSString *const kLoopback = @"127.0.0.1";
@@ -37,7 +31,6 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
 
 @interface NTHelper : NSObject
 @property (nonatomic, readonly) int port;
-@property (nonatomic, readonly) BOOL runningAsRoot;
 - (BOOL)isAlive;
 - (BOOL)startWithError:(NSString **)error;
 - (void)stop;
@@ -70,10 +63,6 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
     [_logLock unlock];
 }
 
-- (void)appendLogLine:(NSString *)line {
-    [self appendLog:[[line stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding]];
-}
-
 - (NSString *)recentLog {
     [_logLock lock];
     NSString *text = [[NSString alloc] initWithData:_log encoding:NSUTF8StringEncoding];
@@ -98,8 +87,8 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
 }
 
 - (void)stop {
-    // The helper may be root, which this process cannot signal. Closing its
-    // stdin makes it exit on its own (NEXTTRACE_EXIT_ON_STDIN_CLOSE).
+    // Closing its stdin makes the helper exit on its own
+    // (NEXTTRACE_EXIT_ON_STDIN_CLOSE); SIGTERM covers a helper stuck before that.
     if (_stdinWriteFD >= 0) {
         close(_stdinWriteFD);
         _stdinWriteFD = -1;
@@ -151,7 +140,7 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
 }
 
 // Spawns the helper with stdin/stdout/stderr on pipes. Returns 0 or an errno.
-- (int)spawn:(NSString *)binary port:(int)port asRoot:(BOOL)asRoot {
+- (int)spawn:(NSString *)binary port:(int)port {
     int inPipe[2], outPipe[2];
     if (pipe(inPipe) != 0) {
         return errno;
@@ -174,11 +163,6 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
     // Close every other descriptor in the child. In particular it must not
     // inherit the write end of its own stdin pipe, or stdin would never hit EOF.
     posix_spawnattr_setflags(&attr, POSIX_SPAWN_CLOEXEC_DEFAULT);
-    if (asRoot) {
-        posix_spawnattr_set_persona_np(&attr, 99, NT_POSIX_SPAWN_PERSONA_FLAGS_OVERRIDE);
-        posix_spawnattr_set_persona_uid_np(&attr, 0);
-        posix_spawnattr_set_persona_gid_np(&attr, 0);
-    }
 
     NSString *home = [NTHelper dataDirectory];
     NSString *listen = [NSString stringWithFormat:@"%@:%d", kLoopback, port];
@@ -256,31 +240,23 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
         return NO;
     }
 
-    for (NSNumber *asRoot in @[@YES, @NO]) {
-        int port = [NTHelper pickFreePort];
-        if (port == 0) {
-            if (error) *error = @"could not find a free loopback port";
-            return NO;
-        }
-        [self stop];
-        int rc = [self spawn:binary port:port asRoot:asRoot.boolValue];
-        if (rc != 0) {
-            [self appendLogLine:[NSString stringWithFormat:@"[shell] spawn (root=%@) failed: %s",
-                                 asRoot, strerror(rc)]];
-            continue;
-        }
-        if ([self waitUntilReady:port]) {
-            _port = port;
-            _runningAsRoot = asRoot.boolValue;
-            [self appendLogLine:[NSString stringWithFormat:@"[shell] helper ready on port %d (root=%@)",
-                                 port, asRoot]];
-            return YES;
-        }
-        [self appendLogLine:[NSString stringWithFormat:@"[shell] helper (root=%@) did not become ready", asRoot]];
+    int port = [NTHelper pickFreePort];
+    if (port == 0) {
+        if (error) *error = @"could not find a free loopback port";
+        return NO;
     }
-    [self stop];
-    if (error) *error = @"NextTrace helper failed to start";
-    return NO;
+    int rc = [self spawn:binary port:port];
+    if (rc != 0) {
+        if (error) *error = [NSString stringWithFormat:@"could not start the NextTrace helper: %s", strerror(rc)];
+        return NO;
+    }
+    if (![self waitUntilReady:port]) {
+        [self stop];
+        if (error) *error = @"NextTrace helper did not become ready";
+        return NO;
+    }
+    _port = port;
+    return YES;
 }
 
 @end
