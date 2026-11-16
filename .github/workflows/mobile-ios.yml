@@ -1,0 +1,76 @@
+name: Mobile iOS
+
+# Builds the iOS shell app (mobile/ios) as a .tipa for TrollStore.
+# Fork-only workflow: it lives on the `mobile` branch and never runs upstream.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mobile]
+    paths-ignore:
+      - "mobile/android/**"
+      - ".github/workflows/mobile-android.yml"
+      - "**/*.md"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RELEASE_TAG: ios-latest
+
+jobs:
+  tipa:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Resolve build metadata
+        run: |
+          set -Eeuo pipefail
+          echo "BUILD_VERSION=$(git describe --tags --always 2>/dev/null || echo dev)" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "COMMIT_SHA1=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build TrollStore package
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          set -Eeuo pipefail
+          xcodebuild -version
+          bash mobile/ios/build.sh "$GITHUB_WORKSPACE/dist-ios"
+
+      - name: Upload tipa artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: NextTrace-ios
+          path: dist-ios/NextTrace-ios.tipa
+          if-no-files-found: error
+
+      - name: Publish rolling pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          NOTES="Automated TrollStore build (iOS 16.0+, arm64) from \`${GITHUB_REF_NAME}\` @ ${COMMIT_SHA1} (${BUILD_VERSION}, ${BUILD_DATE})."
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$RELEASE_TAG" dist-ios/NextTrace-ios.tipa \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "NextTrace iOS (latest TrollStore build)" \
+            --notes "$NOTES"
