@@ -24,7 +24,8 @@ env:
 
 jobs:
   tipa:
-    runs-on: macos-latest
+    # Intel runners: the arm64 macOS pool is often out of capacity. Cross-builds iOS arm64 fine.
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - name: Checkout
