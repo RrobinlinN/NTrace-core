@@ -694,6 +694,24 @@ html.app-shell .mtr-host-cell {
   font-weight: 600;
 }
 
+/* ASN / whois prefix as a solid tag in the CLI colours (green, yellow for
+   premium backbones). The same tag reads on both the dark and light cards,
+   so the colours stay identical across themes. */
+html.app-shell .result .geo-asn {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: #4ade80;
+  color: #052e16;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+html.app-shell .result .geo-asn.geo-asn--backbone {
+  background: #facc15;
+  color: #422006;
+}
+
 /* Hops on a premium backbone (yellow in the CLI) get a matching card edge. */
 html.app-shell .result tbody tr:has(.geo--backbone) {
   box-shadow: inset 3px 0 0 var(--shell-backbone);
@@ -752,7 +770,6 @@ html.app-shell[data-theme="light"] {
   --shell-backdrop: rgba(15, 23, 42, 0.35);
   --shell-ttl-bg: rgba(2, 132, 199, 0.12);
   --shell-ttl-text: #0369a1;
-  --shell-backbone: #eab308;
   color-scheme: light;
 }
 
@@ -826,14 +843,4 @@ html.app-shell[data-theme="light"] .result .attempt__badge {
 html.app-shell[data-theme="light"] .result .attempt__badge--fail {
   background: rgba(220, 38, 38, 0.1);
   color: #b91c1c;
-}
-
-/* CLI colours, darkened to stay readable on white cards. */
-html.app-shell[data-theme="light"] .geo-asn {
-  color: #15803d;
-}
-
-html.app-shell[data-theme="light"] .geo-asn.geo-asn--backbone,
-html.app-shell[data-theme="light"] .geo-asn--backbone {
-  color: #a16207;
 }
