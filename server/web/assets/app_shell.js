@@ -17,6 +17,7 @@
 
   const RECENTS_KEY = 'nexttrace.shell.recentTargets';
   const RECENTS_MAX = 8;
+  const MAP_KEY = 'nexttrace.shell.disableMap';
   const TEXT = {
     cn: { options: '选项', done: '完成' },
     en: { options: 'Options', done: 'Done' },
@@ -227,6 +228,32 @@
     }
     new MutationObserver(syncRunning).observe(submitBtn, { attributes: true, attributeFilter: ['disabled'] });
     syncRunning();
+
+    // Map generation is off by default in the app (the map service often
+    // answers "request url not found"). app.js resets the checkbox from the
+    // server defaults once /api/options has loaded, which is also when the
+    // protocol list gets filled, so re-apply the app's choice then.
+    const mapToggle = document.getElementById('disable-maptrace');
+    if (mapToggle) {
+      const applyMapChoice = () => {
+        let stored = null;
+        try {
+          stored = window.localStorage.getItem(MAP_KEY);
+        } catch (err) {
+          // Fall through to the default.
+        }
+        mapToggle.checked = stored === null ? true : stored === '1';
+      };
+      mapToggle.addEventListener('change', () => {
+        try {
+          window.localStorage.setItem(MAP_KEY, mapToggle.checked ? '1' : '0');
+        } catch (err) {
+          // The choice then only lasts for this session.
+        }
+      });
+      new MutationObserver(applyMapChoice).observe(protocolSelect, { childList: true });
+      applyMapChoice();
+    }
 
     form.addEventListener('submit', () => {
       const value = target.value.trim();

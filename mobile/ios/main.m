@@ -24,6 +24,7 @@
 extern char **environ;
 
 static NSString *const kLoopback = @"127.0.0.1";
+static const int kPreferredPort = 31780;
 static const NSTimeInterval kStartTimeout = 20.0;
 static const NSUInteger kMaxLogBytes = 16 * 1024;
 
@@ -98,14 +99,26 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
     }
 }
 
+// The page keeps its settings and recent targets in localStorage, which is
+// scoped to the origin including the port. Prefer one fixed port so they
+// survive restarts, and only fall back to a random one if it is taken.
 + (int)pickFreePort {
+    int port = [self bindLoopbackPort:kPreferredPort];
+    return port != 0 ? port : [self bindLoopbackPort:0];
+}
+
+// Binds 127.0.0.1:requested (0 = any) and returns the bound port, or 0.
++ (int)bindLoopbackPort:(int)requested {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         return 0;
     }
+    int reuse = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     struct sockaddr_in addr = {0};
     addr.sin_len = sizeof(addr);
     addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)requested);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     socklen_t len = sizeof(addr);
     int port = 0;

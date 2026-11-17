@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     private static final String TAG = "NextTrace";
     private static final String BINARY_NAME = "libnexttrace.so";
     private static final String LOOPBACK = "127.0.0.1";
+    private static final int PREFERRED_PORT = 31780;
     private static final int START_TIMEOUT_MS = 20_000;
     private static final int MAX_LOG_LINES = 200;
     // Matches --shell-bg in server/web/assets/app_shell.css.
@@ -218,7 +219,15 @@ public class MainActivity extends Activity {
         }
     }
 
+    // The page keeps its settings and recent targets in localStorage, which is
+    // scoped to the origin including the port. Prefer one fixed port so they
+    // survive restarts, and only fall back to a random one if it is taken.
     private static int pickFreePort() throws IOException {
+        try (ServerSocket socket = new ServerSocket(PREFERRED_PORT, 1, InetAddress.getByName(LOOPBACK))) {
+            return socket.getLocalPort();
+        } catch (IOException e) {
+            Log.w(TAG, "port " + PREFERRED_PORT + " is busy, using a random one", e);
+        }
         try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName(LOOPBACK))) {
             return socket.getLocalPort();
         }
