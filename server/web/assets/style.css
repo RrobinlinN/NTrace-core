@@ -492,6 +492,16 @@ body.mode-mtr .result table {
   color: #94a3b8;
 }
 
+/* ASN / whois prefix colours follow the CLI: green, yellow for premium backbones. */
+.geo-asn {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.geo-asn--backbone {
+  color: #facc15;
+}
+
 body:not(.mode-mtr) .attempt__meta {
   font-size: 0.9rem;
 }

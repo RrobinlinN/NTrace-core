@@ -278,13 +278,25 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor colorWithRed:15 / 255.0 green:23 / 255.0 blue:42 / 255.0 alpha:1];
+    // Matches --shell-bg in server/web/assets/app_shell.css, so the status bar
+    // area and the page read as one surface.
+    UIColor *background = [UIColor colorWithRed:11 / 255.0 green:18 / 255.0 blue:32 / 255.0 alpha:1];
+    self.view.backgroundColor = background;
     _helper = [NTHelper new];
 
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
     _webView = [[WKWebView alloc] initWithFrame:CGRectZero configuration:config];
     _webView.navigationDelegate = self;
     _webView.UIDelegate = self;
+    // Behave like an app surface, not a browser page: no white flash, no
+    // rubber-banding, no link previews.
+    _webView.opaque = NO;
+    _webView.backgroundColor = background;
+    _webView.scrollView.backgroundColor = background;
+    _webView.scrollView.bounces = NO;
+    _webView.scrollView.showsHorizontalScrollIndicator = NO;
+    _webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    _webView.allowsLinkPreview = NO;
     _webView.hidden = YES;
     _webView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:_webView];
@@ -308,6 +320,10 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
         ]];
     }
     [self ensureRunning];
+}
+
+- (UIStatusBarStyle)preferredStatusBarStyle {
+    return UIStatusBarStyleLightContent;
 }
 
 - (void)showStatus:(NSString *)text {
@@ -338,7 +354,8 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
                                   error ?: @"NextTrace failed to start", [helper recentLog]]];
                 return;
             }
-            NSString *url = [NSString stringWithFormat:@"http://%@:%d/", kLoopback, helper.port];
+            // shell=app switches the console to its app layout (app_shell.js).
+            NSString *url = [NSString stringWithFormat:@"http://%@:%d/?shell=app", kLoopback, helper.port];
             [self->_webView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:url]]];
         });
     });

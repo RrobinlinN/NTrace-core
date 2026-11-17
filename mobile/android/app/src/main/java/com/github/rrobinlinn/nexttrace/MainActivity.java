@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
@@ -46,6 +47,8 @@ public class MainActivity extends Activity {
     private static final String LOOPBACK = "127.0.0.1";
     private static final int START_TIMEOUT_MS = 20_000;
     private static final int MAX_LOG_LINES = 200;
+    // Matches --shell-bg in server/web/assets/app_shell.css.
+    private static final int APP_BACKGROUND = Color.rgb(11, 18, 32);
 
     // The helper outlives Activity recreation, so it is process-wide state.
     private static final Object LOCK = new Object();
@@ -62,10 +65,18 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // One colour for window, system bars and page, so nothing flashes white
+        // and the bars read as part of the app.
+        getWindow().setBackgroundDrawable(new ColorDrawable(APP_BACKGROUND));
+        getWindow().setStatusBarColor(APP_BACKGROUND);
+        getWindow().setNavigationBarColor(APP_BACKGROUND);
+
         FrameLayout root = new FrameLayout(this);
         root.setFitsSystemWindows(true);
+        root.setBackgroundColor(APP_BACKGROUND);
 
         webView = new WebView(this);
+        webView.setBackgroundColor(APP_BACKGROUND);
         webView.setVisibility(View.INVISIBLE);
         configureWebView(webView);
         root.addView(webView, new FrameLayout.LayoutParams(
@@ -81,7 +92,7 @@ public class MainActivity extends Activity {
         statusView.setOnClickListener(v -> startServer());
 
         statusScroll = new ScrollView(this);
-        statusScroll.setBackgroundColor(Color.rgb(15, 23, 42));
+        statusScroll.setBackgroundColor(APP_BACKGROUND);
         statusScroll.setFillViewport(true);
         statusScroll.addView(statusView, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -96,8 +107,14 @@ public class MainActivity extends Activity {
         WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setBuiltInZoomControls(true);
+        // Behave like an app surface, not a browser page: no pinch zoom, no
+        // overscroll glow, no scrollbars.
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
+        view.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        view.setVerticalScrollBarEnabled(false);
+        view.setHorizontalScrollBarEnabled(false);
         view.setWebChromeClient(new WebChromeClient());
         view.setWebViewClient(new WebViewClient() {
             @Override
@@ -135,7 +152,8 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             try {
                 int port = ensureServer();
-                String url = "http://" + LOOPBACK + ":" + port + "/";
+                // shell=app switches the console to its app layout (app_shell.js).
+                String url = "http://" + LOOPBACK + ":" + port + "/?shell=app";
                 runOnUiThread(() -> {
                     statusScroll.setVisibility(View.GONE);
                     webView.setVisibility(View.VISIBLE);
@@ -264,11 +282,18 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.getVisibility() == View.VISIBLE && webView.canGoBack()) {
-            webView.goBack();
+        if (webView == null || webView.getVisibility() != View.VISIBLE) {
+            super.onBackPressed();
             return;
         }
-        super.onBackPressed();
+        // Let the page consume Back first (it closes the options sheet).
+        webView.evaluateJavascript(
+                "(window.nextTraceShellBack && window.nextTraceShellBack()) === true",
+                handled -> {
+                    if (!"true".equals(handled)) {
+                        MainActivity.super.onBackPressed();
+                    }
+                });
     }
 
     @Override

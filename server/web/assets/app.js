@@ -561,8 +561,7 @@ function renderAttemptsGrouped(attempts) {
         segments.push(first.geo.owner || first.geo.isp);
       }
     }
-    if (segments.length > 0) {
-      geoLine.textContent = segments.join(' · ');
+    if (fillGeoLine(geoLine, segments, first.geo, displayIp)) {
       box.appendChild(geoLine);
     }
 
@@ -1338,7 +1337,7 @@ function renderMTRStats(stats) {
     if (geoText) {
       const geoDiv = document.createElement('div');
       geoDiv.className = 'attempt__geo';
-      geoDiv.textContent = geoText;
+      fillGeoLine(geoDiv, geoText.split(' · '), stat.geo, hostParts.ip);
       hostCell.appendChild(geoDiv);
     }
     if (mplsText) {
@@ -1382,6 +1381,17 @@ function formatLatency(value, received) {
     return '--';
   }
   return Number(value).toFixed(2) + ' ms';
+}
+
+// Writes a hop's geo line. The ASN / whois prefix are coloured like the CLI
+// (yellow for premium backbones) when route_class.js is loaded.
+function fillGeoLine(el, segments, geo, ip) {
+  const helper = window.nextTraceRouteClass && window.nextTraceRouteClass.fillGeoLine;
+  if (typeof helper === 'function') {
+    return helper(el, segments, geo, ip);
+  }
+  el.textContent = segments.join(' · ');
+  return segments.length > 0;
 }
 
 function formatGeoDisplay(geo) {

@@ -1,0 +1,717 @@
+/*
+ * App-shell skin for the mobile shell apps (mobile/android, mobile/ios).
+ *
+ * The shells load the console as /?shell=app; app_shell.js then puts the
+ * `app-shell` class on <html> and rearranges the form. Every rule here is
+ * scoped to that class, so the regular browser console is unaffected.
+ */
+
+html.app-shell {
+  --shell-bg: #0b1220;
+  --shell-surface: #131c2e;
+  --shell-surface-2: #1a2540;
+  --shell-line: rgba(148, 163, 184, 0.16);
+  --shell-text: #e6edf7;
+  --shell-muted: #8b9ab3;
+  --shell-accent: #38bdf8;
+  --shell-accent-ink: #06243a;
+  --shell-bar-h: 52px;
+  --shell-gutter: 14px;
+  background: var(--shell-bg);
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+html.app-shell body {
+  background: var(--shell-bg);
+  color: var(--shell-text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  line-height: 1.45;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Results stay selectable so addresses can be copied. */
+html.app-shell .result,
+html.app-shell .result-meta,
+html.app-shell input {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+html.app-shell .footer,
+html.app-shell .header__subtitle {
+  display: none;
+}
+
+/* ── App bar ─────────────────────────────────────────────────────────── */
+
+html.app-shell .header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: env(safe-area-inset-top, 0px) var(--shell-gutter) 0;
+  background: var(--shell-bg);
+}
+
+html.app-shell .header__top {
+  height: var(--shell-bar-h);
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+/* app.js rewrites the title text on every language switch, so restyle it
+   instead of replacing it. */
+html.app-shell .header__title h1 {
+  font-size: 0;
+}
+
+html.app-shell .header__title h1::before {
+  content: "NextTrace";
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+html.app-shell .header__actions {
+  width: auto;
+  flex-wrap: nowrap;
+  gap: 0;
+}
+
+html.app-shell .shell-icon-btn {
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--shell-text);
+}
+
+html.app-shell .shell-icon-btn:active {
+  background: var(--shell-surface-2);
+}
+
+html.app-shell .shell-icon-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Indeterminate progress line under the bar while a trace runs. */
+html.app-shell .header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--shell-accent), transparent);
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  opacity: 0;
+}
+
+html.app-shell.shell-running .header::after {
+  opacity: 1;
+  animation: shell-progress 1.1s linear infinite;
+}
+
+@keyframes shell-progress {
+  from { background-position: -45% 0; }
+  to { background-position: 145% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.app-shell.shell-running .header::after {
+    animation: none;
+    background-size: 100% 100%;
+  }
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────── */
+
+html.app-shell .container,
+html.app-shell body.mode-mtr .container {
+  max-width: 720px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 10px;
+  padding: 4px var(--shell-gutter) 24px;
+}
+
+html.app-shell .panel,
+html.app-shell body.mode-mtr .panel--form,
+html.app-shell body.mode-mtr .panel--results {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+html.app-shell .form {
+  gap: 10px;
+}
+
+/* ── Search row ──────────────────────────────────────────────────────── */
+
+html.app-shell .shell-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+html.app-shell .shell-search #target {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  color: var(--shell-text);
+  font-size: 16px;
+}
+
+html.app-shell .shell-search #target::placeholder {
+  color: var(--shell-muted);
+}
+
+html.app-shell .shell-search #target:focus {
+  border-color: var(--shell-accent);
+  box-shadow: none;
+}
+
+html.app-shell .shell-search .form__actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+/* Start / stop become icon buttons; their text labels stay for a11y. */
+html.app-shell #submit-btn,
+html.app-shell #stop-btn {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  font-size: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 22px 22px;
+  transition: none;
+  transform: none;
+  box-shadow: none;
+}
+
+html.app-shell #submit-btn {
+  background-color: var(--shell-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2306243a' d='M8 5.2v13.6a.8.8 0 0 0 1.2.7l11-6.8a.8.8 0 0 0 0-1.4l-11-6.8A.8.8 0 0 0 8 5.2z'/%3E%3C/svg%3E");
+}
+
+html.app-shell #submit-btn:disabled {
+  opacity: 0.45;
+}
+
+html.app-shell #submit-btn:active:not(:disabled) {
+  filter: brightness(0.88);
+}
+
+html.app-shell #stop-btn {
+  background-color: rgba(248, 113, 113, 0.16);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6.5' y='6.5' width='11' height='11' rx='2' fill='%23f87171'/%3E%3C/svg%3E");
+}
+
+html.app-shell #stop-btn:disabled {
+  display: none;
+}
+
+/* ── Segmented controls (mode, protocol) ─────────────────────────────── */
+
+html.app-shell .shell-segments {
+  display: flex;
+  gap: 8px;
+}
+
+html.app-shell .shell-segment {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--shell-surface);
+}
+
+html.app-shell .shell-segment button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 34px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--shell-muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html.app-shell .shell-segment button[aria-pressed="true"] {
+  background: var(--shell-surface-2);
+  color: var(--shell-text);
+  box-shadow: inset 0 0 0 1px var(--shell-line);
+}
+
+/* The selects stay in the form (app.js reads them) but are driven by the
+   segmented controls above. */
+html.app-shell .shell-offscreen {
+  display: none !important;
+}
+
+/* ── Recent targets ──────────────────────────────────────────────────── */
+
+html.app-shell .shell-recents {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 calc(-1 * var(--shell-gutter));
+  padding: 0 var(--shell-gutter);
+  scrollbar-width: none;
+}
+
+html.app-shell .shell-recents::-webkit-scrollbar {
+  display: none;
+}
+
+html.app-shell .shell-recents:empty {
+  display: none;
+}
+
+html.app-shell .shell-recents button {
+  flex: 0 0 auto;
+  max-width: 62vw;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--shell-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html.app-shell .shell-recents button:active {
+  background: var(--shell-surface);
+}
+
+/* ── Options sheet ───────────────────────────────────────────────────── */
+
+html.app-shell .shell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(2, 6, 14, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+html.app-shell .shell-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px 20px 0 0;
+  background: var(--shell-surface);
+  transform: translateY(105%);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+html.app-shell.shell-sheet-open .shell-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+html.app-shell.shell-sheet-open .shell-sheet {
+  transform: none;
+}
+
+html.app-shell.shell-sheet-open body {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.app-shell .shell-backdrop,
+  html.app-shell .shell-sheet {
+    transition: none;
+  }
+}
+
+html.app-shell .shell-sheet__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 8px;
+}
+
+html.app-shell .shell-sheet__bar::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  margin-left: -18px;
+  border-radius: 2px;
+  background: var(--shell-line);
+}
+
+html.app-shell .shell-sheet__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+html.app-shell .shell-sheet__done {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--shell-accent);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+html.app-shell .shell-sheet__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+}
+
+html.app-shell .shell-sheet .form__group,
+html.app-shell .shell-sheet .form__group.grid > div,
+html.app-shell .shell-sheet .form__group.checkbox-group {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+html.app-shell .shell-sheet .form__group.grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* The protocol cell next to the provider is driven by the segmented control,
+   so the provider takes the full row. */
+html.app-shell .shell-sheet .shell-wide {
+  grid-column: 1 / -1;
+}
+
+html.app-shell .shell-sheet label {
+  font-size: 0.8rem;
+  color: var(--shell-muted);
+}
+
+html.app-shell .shell-sheet input[type="number"],
+html.app-shell .shell-sheet input[type="text"],
+html.app-shell .shell-sheet select {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--shell-line);
+  border-radius: 12px;
+  background: var(--shell-bg);
+  color: var(--shell-text);
+  font-size: 16px;
+}
+
+html.app-shell .shell-sheet input:focus,
+html.app-shell .shell-sheet select:focus {
+  border-color: var(--shell-accent);
+  box-shadow: none;
+}
+
+html.app-shell .shell-sheet .checkbox {
+  width: 100%;
+  min-height: 44px;
+  justify-content: space-between;
+  flex-direction: row-reverse;
+}
+
+html.app-shell .shell-sheet .checkbox span {
+  font-size: 0.95rem;
+  color: var(--shell-text);
+}
+
+html.app-shell .shell-sheet .checkbox input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--shell-accent);
+}
+
+html.app-shell .shell-sheet__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+html.app-shell .shell-sheet__actions .action-btn {
+  flex: 1 1 0;
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--shell-line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--shell-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── Status and summary ──────────────────────────────────────────────── */
+
+html.app-shell .results-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+html.app-shell .status {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+html.app-shell .status--idle {
+  color: var(--shell-muted);
+}
+
+html.app-shell .result-meta,
+html.app-shell .panel--results #result-meta,
+html.app-shell body.mode-mtr .panel--results #result-meta {
+  max-width: none;
+  margin: 0;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--shell-muted);
+}
+
+html.app-shell #result {
+  overflow: visible;
+}
+
+html.app-shell .result > p {
+  margin: 28px 0;
+  text-align: center;
+  color: var(--shell-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Hop cards (the result tables, restacked) ────────────────────────── */
+
+html.app-shell .result table,
+html.app-shell body.mode-mtr .result table {
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+html.app-shell .result thead {
+  display: none;
+}
+
+html.app-shell .result tbody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+html.app-shell .result tbody tr {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--shell-surface);
+}
+
+html.app-shell .result tbody tr:hover {
+  background: var(--shell-surface);
+}
+
+html.app-shell .result td {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+/* TTL badge */
+html.app-shell .result td:first-child {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+html.app-shell .result td:first-child:empty {
+  visibility: hidden;
+}
+
+html.app-shell .result .attempts--grouped {
+  gap: 8px;
+}
+
+html.app-shell .result .attempt,
+html.app-shell .result .attempt--group {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  gap: 4px;
+}
+
+html.app-shell .result .attempt + .attempt {
+  padding-top: 8px;
+  border-top: 1px solid var(--shell-line);
+}
+
+html.app-shell .result .attempt__header {
+  gap: 4px 8px;
+  font-size: 0.95rem;
+}
+
+html.app-shell .result .attempt__meta,
+html.app-shell body:not(.mode-mtr) .result .attempt__meta {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+html.app-shell .result .attempt__geo,
+html.app-shell body:not(.mode-mtr) .result .attempt__geo {
+  font-size: 0.8rem;
+  color: var(--shell-muted);
+}
+
+/* Continuous (MTR) mode: host and loss on top, the four latencies below.
+   Eight equal tracks keep the latency columns wide enough for "1234.56 ms". */
+html.app-shell body.mode-mtr .result tbody tr {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-areas:
+    "ttl host host host host host loss loss"
+    "last last avg avg best best worst worst";
+  row-gap: 10px;
+  column-gap: 6px;
+}
+
+html.app-shell body.mode-mtr .result td:nth-child(2) {
+  text-align: right;
+}
+
+html.app-shell body.mode-mtr .result td:nth-child(1) { grid-area: ttl; }
+html.app-shell body.mode-mtr .result td:nth-child(2) { grid-area: loss; }
+html.app-shell body.mode-mtr .result td:nth-child(3) { grid-area: last; }
+html.app-shell body.mode-mtr .result td:nth-child(4) { grid-area: avg; }
+html.app-shell body.mode-mtr .result td:nth-child(5) { grid-area: best; }
+html.app-shell body.mode-mtr .result td:nth-child(6) { grid-area: worst; }
+html.app-shell body.mode-mtr .result td:nth-child(7) { grid-area: host; }
+
+html.app-shell body.mode-mtr .result td:nth-child(n+2):nth-child(-n+6) {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+html.app-shell body.mode-mtr .result td:nth-child(n+2):nth-child(-n+6)::before {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--shell-muted);
+}
+
+html.app-shell body.mode-mtr .result td:nth-child(2)::before { content: "Loss"; }
+html.app-shell body.mode-mtr .result td:nth-child(3)::before { content: "Last"; }
+html.app-shell body.mode-mtr .result td:nth-child(4)::before { content: "Avg"; }
+html.app-shell body.mode-mtr .result td:nth-child(5)::before { content: "Best"; }
+html.app-shell body.mode-mtr .result td:nth-child(6)::before { content: "Worst"; }
+
+html.app-shell .mtr-host-cell {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Hops on a premium backbone (yellow in the CLI) get a matching card edge. */
+html.app-shell .result tbody tr:has(.geo--backbone) {
+  box-shadow: inset 3px 0 0 #facc15;
+}
+
+/* Card header: address first and prominent, reverse DNS name underneath.
+   The "Host:" / "Address:" captions are redundant in this layout. */
+html.app-shell .result .attempt__header {
+  flex-direction: column-reverse;
+  flex-wrap: nowrap;
+  gap: 1px;
+}
+
+html.app-shell .result .attempt__header strong {
+  display: none;
+}
+
+html.app-shell .result .attempt__header span:last-child {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+html.app-shell .result .attempt__header span:not(:last-child) {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--shell-muted);
+}
+
+html.app-shell .result .attempt__meta strong {
+  font-weight: 500;
+  color: var(--shell-muted);
+}
+
+html.app-shell .result .attempt__badge {
+  padding: 0 0.4rem;
+  font-size: 0.68rem;
+}
