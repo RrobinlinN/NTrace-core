@@ -15,9 +15,16 @@ html.app-shell {
   --shell-muted: #8b9ab3;
   --shell-accent: #38bdf8;
   --shell-accent-ink: #06243a;
+  --shell-danger: #f87171;
+  --shell-danger-bg: rgba(248, 113, 113, 0.16);
+  --shell-backdrop: rgba(2, 6, 14, 0.6);
+  --shell-ttl-bg: rgba(56, 189, 248, 0.14);
+  --shell-ttl-text: #7dd3fc;
+  --shell-backbone: #facc15;
   --shell-bar-h: 52px;
   --shell-gutter: 14px;
   background: var(--shell-bg);
+  color-scheme: dark;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
@@ -94,6 +101,10 @@ html.app-shell .shell-icon-btn {
   border-radius: 50%;
   background: transparent;
   color: var(--shell-text);
+}
+
+html.app-shell .shell-icon-btn:not(:last-child) {
+  margin-right: 0;
 }
 
 html.app-shell .shell-icon-btn:active {
@@ -232,7 +243,7 @@ html.app-shell #submit-btn:active:not(:disabled) {
 }
 
 html.app-shell #stop-btn {
-  background-color: rgba(248, 113, 113, 0.16);
+  background-color: var(--shell-danger-bg);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6.5' y='6.5' width='11' height='11' rx='2' fill='%23f87171'/%3E%3C/svg%3E");
 }
 
@@ -328,7 +339,7 @@ html.app-shell .shell-backdrop {
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(2, 6, 14, 0.6);
+  background: var(--shell-backdrop);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -475,6 +486,11 @@ html.app-shell .shell-sheet .checkbox input {
   accent-color: var(--shell-accent);
 }
 
+/* The sheet itself is --shell-surface, so its segmented control steps down. */
+html.app-shell .shell-sheet .shell-segment {
+  background: var(--shell-bg);
+}
+
 html.app-shell .shell-sheet__actions {
   display: flex;
   gap: 10px;
@@ -585,8 +601,8 @@ html.app-shell .result td:first-child {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: rgba(56, 189, 248, 0.14);
-  color: #7dd3fc;
+  background: var(--shell-ttl-bg);
+  color: var(--shell-ttl-text);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -680,7 +696,7 @@ html.app-shell .mtr-host-cell {
 
 /* Hops on a premium backbone (yellow in the CLI) get a matching card edge. */
 html.app-shell .result tbody tr:has(.geo--backbone) {
-  box-shadow: inset 3px 0 0 #facc15;
+  box-shadow: inset 3px 0 0 var(--shell-backbone);
 }
 
 /* Card header: address first and prominent, reverse DNS name underneath.
@@ -714,4 +730,110 @@ html.app-shell .result .attempt__meta strong {
 html.app-shell .result .attempt__badge {
   padding: 0 0.4rem;
   font-size: 0.68rem;
+}
+
+/* ── Light theme ─────────────────────────────────────────────────────────
+ * app_shell.js sets data-theme="light" on <html> for the light appearance
+ * (chosen in the app bar or options sheet, or following the system).
+ * style.css only has dark colours, so the console rules that still show
+ * through the app layout are recoloured here too. */
+
+html.app-shell[data-theme="light"] {
+  --shell-bg: #f2f4f8;
+  --shell-surface: #ffffff;
+  --shell-surface-2: #e4e9f1;
+  --shell-line: rgba(15, 23, 42, 0.12);
+  --shell-text: #0f172a;
+  --shell-muted: #5b677a;
+  --shell-accent: #0284c7;
+  --shell-accent-ink: #ffffff;
+  --shell-danger: #dc2626;
+  --shell-danger-bg: rgba(220, 38, 38, 0.1);
+  --shell-backdrop: rgba(15, 23, 42, 0.35);
+  --shell-ttl-bg: rgba(2, 132, 199, 0.12);
+  --shell-ttl-text: #0369a1;
+  --shell-backbone: #eab308;
+  color-scheme: light;
+}
+
+html.app-shell[data-theme="light"] #submit-btn {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ffffff' d='M8 5.2v13.6a.8.8 0 0 0 1.2.7l11-6.8a.8.8 0 0 0 0-1.4l-11-6.8A.8.8 0 0 0 8 5.2z'/%3E%3C/svg%3E");
+}
+
+html.app-shell[data-theme="light"] #stop-btn {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6.5' y='6.5' width='11' height='11' rx='2' fill='%23dc2626'/%3E%3C/svg%3E");
+}
+
+html.app-shell[data-theme="light"] .shell-sheet {
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.12);
+}
+
+html.app-shell[data-theme="light"] .result tbody tr {
+  box-shadow: 0 0 0 1px var(--shell-line);
+}
+
+html.app-shell[data-theme="light"] .result tbody tr:has(.geo--backbone) {
+  box-shadow: inset 3px 0 0 var(--shell-backbone), 0 0 0 1px var(--shell-line);
+}
+
+html.app-shell[data-theme="light"] a {
+  color: #0369a1;
+}
+
+html.app-shell[data-theme="light"] label,
+html.app-shell[data-theme="light"] .form__group small {
+  color: var(--shell-muted);
+}
+
+html.app-shell[data-theme="light"] input[type="text"],
+html.app-shell[data-theme="light"] input[type="number"],
+html.app-shell[data-theme="light"] select {
+  border-color: var(--shell-line);
+  background: var(--shell-bg);
+  color: var(--shell-text);
+}
+
+html.app-shell[data-theme="light"] .status--running {
+  color: var(--shell-accent);
+}
+
+html.app-shell[data-theme="light"] .status--error {
+  color: var(--shell-danger);
+}
+
+html.app-shell[data-theme="light"] .status--success {
+  color: #15803d;
+}
+
+html.app-shell[data-theme="light"] .mtr-host-cell,
+html.app-shell[data-theme="light"] .result .attempt__header,
+html.app-shell[data-theme="light"] .result .attempt__star,
+html.app-shell[data-theme="light"] .result .attempt__meta {
+  color: var(--shell-text);
+}
+
+html.app-shell[data-theme="light"] .mtr-host-cell .mtr-hostname,
+html.app-shell[data-theme="light"] .mtr-host-cell .mtr-mpls,
+html.app-shell[data-theme="light"] .result .attempt__mpls {
+  color: var(--shell-muted);
+}
+
+html.app-shell[data-theme="light"] .result .attempt__badge {
+  background: rgba(13, 148, 136, 0.12);
+  color: #0f766e;
+}
+
+html.app-shell[data-theme="light"] .result .attempt__badge--fail {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+/* CLI colours, darkened to stay readable on white cards. */
+html.app-shell[data-theme="light"] .geo-asn {
+  color: #15803d;
+}
+
+html.app-shell[data-theme="light"] .geo-asn.geo-asn--backbone,
+html.app-shell[data-theme="light"] .geo-asn--backbone {
+  color: #a16207;
 }

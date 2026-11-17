@@ -18,14 +18,121 @@
   const RECENTS_KEY = 'nexttrace.shell.recentTargets';
   const RECENTS_MAX = 8;
   const MAP_KEY = 'nexttrace.shell.disableMap';
+  const THEME_KEY = 'nexttrace.shell.theme';
+  const THEME_CHOICES = ['system', 'light', 'dark'];
   const TEXT = {
-    cn: { options: '选项', done: '完成' },
-    en: { options: 'Options', done: 'Done' },
+    cn: {
+      options: '选项', done: '完成', appearance: '外观',
+      system: '跟随系统', light: '日间', dark: '夜间',
+      toLight: '切换到日间模式', toDark: '切换到夜间模式',
+    },
+    en: {
+      options: 'Options', done: 'Done', appearance: 'Appearance',
+      system: 'System', light: 'Light', dark: 'Dark',
+      toLight: 'Switch to light mode', toDark: 'Switch to dark mode',
+    },
   };
-  const GEAR_ICON =
+  const ICON_OPEN =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
-    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+  const GEAR_ICON = ICON_OPEN +
     '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>';
+  const SUN_ICON = ICON_OPEN +
+    '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4' +
+    'M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>';
+  const MOON_ICON = ICON_OPEN + '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
+
+  // ── Theme ──────────────────────────────────────────────────────────────
+  // The choice is "system", "light" or "dark"; <html data-theme> always holds
+  // the resolved light/dark value. This runs before first paint.
+  const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  // The Android WebView does not report the system setting through
+  // prefers-color-scheme, so the Android shell passes it in the URL (for the
+  // first paint) and through nextTraceShellSystemTheme() when it changes.
+  let nativeSystemTheme = (/(?:^|[?&])system=(light|dark)(?:&|$)/.exec(window.location.search) || [])[1] || null;
+  let themeChoice = 'system';
+  try {
+    const stored = window.localStorage.getItem(THEME_KEY);
+    if (THEME_CHOICES.indexOf(stored) >= 0) {
+      themeChoice = stored;
+    }
+  } catch (err) {
+    // Storage unavailable: follow the system.
+  }
+  const themeListeners = [];
+
+  function systemTheme() {
+    if (nativeSystemTheme) {
+      return nativeSystemTheme;
+    }
+    // Without a media query answer keep the original dark look.
+    return darkQuery && !darkQuery.matches ? 'light' : 'dark';
+  }
+
+  function resolvedTheme() {
+    return themeChoice === 'system' ? systemTheme() : themeChoice;
+  }
+
+  // Lets the shells match window and system-bar colours to the page.
+  function notifyNativeTheme(theme) {
+    try {
+      if (window.NextTraceShell && typeof window.NextTraceShell.setTheme === 'function') {
+        window.NextTraceShell.setTheme(theme, themeChoice === 'system');
+      } else if (window.webkit && window.webkit.messageHandlers &&
+                 window.webkit.messageHandlers.nextTraceTheme) {
+        window.webkit.messageHandlers.nextTraceTheme.postMessage({
+          theme: theme,
+          followsSystem: themeChoice === 'system',
+        });
+      }
+    } catch (err) {
+      // Not running inside a shell, or the bridge is missing.
+    }
+  }
+
+  function applyTheme() {
+    const theme = resolvedTheme();
+    root.setAttribute('data-theme', theme);
+    root.style.colorScheme = theme;
+    notifyNativeTheme(theme);
+    themeListeners.forEach((listener) => listener());
+  }
+
+  function setThemeChoice(choice) {
+    if (THEME_CHOICES.indexOf(choice) < 0) {
+      return;
+    }
+    themeChoice = choice;
+    try {
+      window.localStorage.setItem(THEME_KEY, choice);
+    } catch (err) {
+      // The choice then only lasts for this session.
+    }
+    applyTheme();
+  }
+
+  // Called by the Android shell when the system switches light/dark.
+  window.nextTraceShellSystemTheme = function (theme) {
+    if (theme !== 'light' && theme !== 'dark') {
+      return;
+    }
+    nativeSystemTheme = theme;
+    applyTheme();
+  };
+
+  if (darkQuery) {
+    const onSystemChange = () => {
+      if (!nativeSystemTheme) {
+        applyTheme();
+      }
+    };
+    if (darkQuery.addEventListener) {
+      darkQuery.addEventListener('change', onSystemChange);
+    } else if (darkQuery.addListener) {
+      darkQuery.addListener(onSystemChange);
+    }
+  }
+  applyTheme();
 
   function el(tag, className) {
     const node = document.createElement(tag);
@@ -175,6 +282,26 @@
         sheetBody.appendChild(group);
       }
     });
+    // Appearance: a detached select drives a segmented control like the
+    // mode/protocol ones; it has no name, so nothing is submitted.
+    const themeSelect = document.createElement('select');
+    THEME_CHOICES.forEach((choice) => {
+      const option = document.createElement('option');
+      option.value = choice;
+      themeSelect.appendChild(option);
+    });
+    themeSelect.value = themeChoice;
+    themeSelect.addEventListener('change', () => {
+      if (themeSelect.value !== themeChoice) {
+        setThemeChoice(themeSelect.value);
+      }
+    });
+    const themeGroup = el('div', 'form__group shell-appearance');
+    const themeLabel = el('label');
+    themeGroup.appendChild(themeLabel);
+    themeGroup.appendChild(buildSegment(themeSelect));
+    sheetBody.appendChild(themeGroup);
+
     const sheetActions = el('div', 'shell-sheet__actions');
     sheetActions.appendChild(cacheBtn);
     sheetActions.appendChild(langBtn);
@@ -188,6 +315,14 @@
     // The sheet stays inside the form so its fields are still submitted.
     form.appendChild(backdrop);
     form.appendChild(sheet);
+
+    // Quick light/dark toggle; "follow the system" is in the options sheet.
+    const themeBtn = el('button', 'shell-icon-btn');
+    themeBtn.type = 'button';
+    themeBtn.addEventListener('click', () => {
+      setThemeChoice(resolvedTheme() === 'dark' ? 'light' : 'dark');
+    });
+    headerActions.appendChild(themeBtn);
 
     const optionsBtn = el('button', 'shell-icon-btn');
     optionsBtn.type = 'button';
@@ -213,11 +348,36 @@
     backdrop.addEventListener('click', () => setSheetOpen(false));
 
     // The language button's own label names the *other* language.
+    function currentText() {
+      return langBtn.textContent.trim() === 'English' ? TEXT.cn : TEXT.en;
+    }
+
+    // The toggle shows the mode it switches to.
+    function syncThemeControls() {
+      const text = currentText();
+      const dark = resolvedTheme() === 'dark';
+      themeBtn.innerHTML = dark ? SUN_ICON : MOON_ICON;
+      themeBtn.setAttribute('aria-label', dark ? text.toLight : text.toDark);
+      if (themeSelect.value !== themeChoice) {
+        themeSelect.value = themeChoice;
+        // Re-renders the segmented control; the change handler sees no change.
+        themeSelect.dispatchEvent(new Event('change'));
+      }
+    }
+    themeListeners.push(syncThemeControls);
+
     function applyText() {
-      const text = langBtn.textContent.trim() === 'English' ? TEXT.cn : TEXT.en;
+      const text = currentText();
       sheetTitle.textContent = text.options;
       sheetDone.textContent = text.done;
       optionsBtn.setAttribute('aria-label', text.options);
+      themeLabel.textContent = text.appearance;
+      Array.from(themeSelect.options).forEach((option) => {
+        if (option.textContent !== text[option.value]) {
+          option.textContent = text[option.value];
+        }
+      });
+      syncThemeControls();
     }
     new MutationObserver(applyText).observe(langBtn, { childList: true, subtree: true, characterData: true });
     applyText();

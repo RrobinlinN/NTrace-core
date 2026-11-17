@@ -3,6 +3,7 @@ package com.github.rrobinlinn.nexttrace;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -11,6 +12,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -48,8 +50,13 @@ public class MainActivity extends Activity {
     private static final int PREFERRED_PORT = 31780;
     private static final int START_TIMEOUT_MS = 20_000;
     private static final int MAX_LOG_LINES = 200;
-    // Matches --shell-bg in server/web/assets/app_shell.css.
-    private static final int APP_BACKGROUND = Color.rgb(11, 18, 32);
+    // Match --shell-bg (dark and light) in server/web/assets/app_shell.css.
+    private static final int DARK_BACKGROUND = Color.rgb(11, 18, 32);
+    private static final int LIGHT_BACKGROUND = Color.rgb(242, 244, 248);
+    private static final String PREFS = "shell";
+    // Last theme the page reported, so the next launch starts in it:
+    // "light", "dark", or "system" when the page follows the system.
+    private static final String PREF_THEME = "theme";
 
     // The helper outlives Activity recreation, so it is process-wide state.
     private static final Object LOCK = new Object();
@@ -61,23 +68,16 @@ public class MainActivity extends Activity {
     private ScrollView statusScroll;
     private TextView statusView;
     private volatile boolean starting;
+    private boolean darkTheme;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // One colour for window, system bars and page, so nothing flashes white
-        // and the bars read as part of the app.
-        getWindow().setBackgroundDrawable(new ColorDrawable(APP_BACKGROUND));
-        getWindow().setStatusBarColor(APP_BACKGROUND);
-        getWindow().setNavigationBarColor(APP_BACKGROUND);
-
         FrameLayout root = new FrameLayout(this);
         root.setFitsSystemWindows(true);
-        root.setBackgroundColor(APP_BACKGROUND);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(APP_BACKGROUND);
         webView.setVisibility(View.INVISIBLE);
         configureWebView(webView);
         root.addView(webView, new FrameLayout.LayoutParams(
@@ -86,14 +86,12 @@ public class MainActivity extends Activity {
         statusView = new TextView(this);
         statusView.setTypeface(Typeface.MONOSPACE);
         statusView.setTextSize(12);
-        statusView.setTextColor(Color.LTGRAY);
         statusView.setTextIsSelectable(false);
         int pad = (int) (16 * getResources().getDisplayMetrics().density);
         statusView.setPadding(pad, pad, pad, pad);
         statusView.setOnClickListener(v -> startServer());
 
         statusScroll = new ScrollView(this);
-        statusScroll.setBackgroundColor(APP_BACKGROUND);
         statusScroll.setFillViewport(true);
         statusScroll.addView(statusView, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -101,6 +99,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         setContentView(root);
+        applyTheme(savedThemeDark());
         startServer();
     }
 
@@ -117,6 +116,9 @@ public class MainActivity extends Activity {
         view.setVerticalScrollBarEnabled(false);
         view.setHorizontalScrollBarEnabled(false);
         view.setWebChromeClient(new WebChromeClient());
+        // Only the loopback console is ever shown here (other URLs open in the
+        // browser); it reports its resolved light/dark theme through this.
+        view.addJavascriptInterface(new ThemeBridge(), "NextTraceShell");
         view.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
@@ -154,7 +156,10 @@ public class MainActivity extends Activity {
             try {
                 int port = ensureServer();
                 // shell=app switches the console to its app layout (app_shell.js).
-                String url = "http://" + LOOPBACK + ":" + port + "/?shell=app";
+                // system= tells it the system appearance, which this WebView
+                // does not expose through prefers-color-scheme.
+                String url = "http://" + LOOPBACK + ":" + port + "/?shell=app&system="
+                        + (systemDark() ? "dark" : "light");
                 runOnUiThread(() -> {
                     statusScroll.setVisibility(View.GONE);
                     webView.setVisibility(View.VISIBLE);
@@ -287,6 +292,83 @@ public class MainActivity extends Activity {
             statusView.setText(text);
             statusScroll.setVisibility(View.VISIBLE);
         });
+    }
+
+    /** The page's last theme, until the page itself reports one. */
+    private boolean savedThemeDark() {
+        String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_THEME, "system");
+        if ("light".equals(saved) || "dark".equals(saved)) {
+            return "dark".equals(saved);
+        }
+        return systemDark();
+    }
+
+    private boolean systemDark() {
+        int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return night == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /**
+     * One colour for window, system bars and page, so nothing flashes and the
+     * bars read as part of the app; bar icons are dark on the light theme.
+     */
+    @SuppressWarnings("deprecation")
+    private void applyTheme(boolean dark) {
+        darkTheme = dark;
+        int background = dark ? DARK_BACKGROUND : LIGHT_BACKGROUND;
+        getWindow().setBackgroundDrawable(new ColorDrawable(background));
+        getWindow().setStatusBarColor(background);
+        getWindow().setNavigationBarColor(background);
+        View decor = getWindow().getDecorView();
+        int flags = decor.getSystemUiVisibility()
+                & ~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        if (!dark) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        decor.setSystemUiVisibility(flags);
+        if (webView != null) {
+            webView.setBackgroundColor(background);
+            ((View) webView.getParent()).setBackgroundColor(background);
+        }
+        if (statusScroll != null) {
+            statusScroll.setBackgroundColor(background);
+            statusView.setTextColor(dark ? Color.LTGRAY : Color.DKGRAY);
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // uiMode is in configChanges, so a light/dark switch lands here instead
+        // of recreating the activity. The page decides whether it follows.
+        String system = systemDark() ? "dark" : "light";
+        if (webView != null && webView.getVisibility() == View.VISIBLE) {
+            webView.evaluateJavascript("window.nextTraceShellSystemTheme && window.nextTraceShellSystemTheme('"
+                    + system + "')", null);
+        } else {
+            applyTheme(savedThemeDark());
+        }
+    }
+
+    /** Called by app_shell.js with the theme the page resolved. */
+    final class ThemeBridge {
+        @JavascriptInterface
+        public void setTheme(String theme, boolean followsSystem) {
+            if (!"dark".equals(theme) && !"light".equals(theme)) {
+                return;
+            }
+            boolean dark = "dark".equals(theme);
+            String saved = followsSystem ? "system" : theme;
+            runOnUiThread(() -> {
+                if (isDestroyed()) {
+                    return;
+                }
+                if (dark != darkTheme) {
+                    applyTheme(dark);
+                }
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_THEME, saved).apply();
+            });
+        }
     }
 
     @Override

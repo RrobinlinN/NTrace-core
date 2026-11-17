@@ -27,6 +27,9 @@ static NSString *const kLoopback = @"127.0.0.1";
 static const int kPreferredPort = 31780;
 static const NSTimeInterval kStartTimeout = 20.0;
 static const NSUInteger kMaxLogBytes = 16 * 1024;
+// Last theme the page reported ("light", "dark", or "system" when the page
+// follows the system), so the next launch starts in it.
+static NSString *const kThemeDefaultsKey = @"NTShellTheme";
 
 #pragma mark - Helper process
 
@@ -276,7 +279,19 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
 
 #pragma mark - UI
 
-@interface NTViewController : UIViewController <WKNavigationDelegate, WKUIDelegate>
+// Weak trampoline: WKUserContentController retains its message handlers, which
+// would otherwise keep the view controller alive.
+@interface NTWeakScriptHandler : NSObject <WKScriptMessageHandler>
+@property (nonatomic, weak) id<WKScriptMessageHandler> target;
+@end
+
+@implementation NTWeakScriptHandler
+- (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message {
+    [self.target userContentController:controller didReceiveScriptMessage:message];
+}
+@end
+
+@interface NTViewController : UIViewController <WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler>
 - (void)ensureRunning;
 - (void)shutdown;
 @end
@@ -287,25 +302,77 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
     UITextView *_statusView;
     BOOL _starting;
     BOOL _loaded;
+    BOOL _darkTheme;
+}
+
+// Match --shell-bg (dark and light) in server/web/assets/app_shell.css, so the
+// status bar area and the page read as one surface.
+static UIColor *NTBackground(BOOL dark) {
+    return dark ? [UIColor colorWithRed:11 / 255.0 green:18 / 255.0 blue:32 / 255.0 alpha:1]
+                : [UIColor colorWithRed:242 / 255.0 green:244 / 255.0 blue:248 / 255.0 alpha:1];
+}
+
+- (void)applyTheme:(BOOL)dark {
+    _darkTheme = dark;
+    UIColor *background = NTBackground(dark);
+    self.view.backgroundColor = background;
+    _webView.backgroundColor = background;
+    _webView.scrollView.backgroundColor = background;
+    _statusView.textColor = dark ? UIColor.lightGrayColor : UIColor.darkGrayColor;
+    [self setNeedsStatusBarAppearanceUpdate];
+}
+
+- (BOOL)systemDark {
+    UIUserInterfaceStyle style = self.traitCollection.userInterfaceStyle;
+    if (style == UIUserInterfaceStyleUnspecified) {
+        // Not in a window yet (viewDidLoad).
+        style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+    }
+    return style == UIUserInterfaceStyleDark;
+}
+
+// app_shell.js posts the theme it resolved; WKWebView follows the system
+// appearance in prefers-color-scheme by itself.
+- (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message {
+    if (![message.body isKindOfClass:[NSDictionary class]]) {
+        return;
+    }
+    NSDictionary *body = message.body;
+    NSString *theme = body[@"theme"];
+    if (![theme isKindOfClass:[NSString class]] ||
+        !([theme isEqualToString:@"light"] || [theme isEqualToString:@"dark"])) {
+        return;
+    }
+    BOOL followsSystem = [body[@"followsSystem"] isKindOfClass:[NSNumber class]] && [body[@"followsSystem"] boolValue];
+    [self applyTheme:[theme isEqualToString:@"dark"]];
+    [NSUserDefaults.standardUserDefaults setObject:(followsSystem ? @"system" : theme) forKey:kThemeDefaultsKey];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previous {
+    [super traitCollectionDidChange:previous];
+    // Before the page is up, follow the system; afterwards the page reports.
+    if (_webView.hidden && [self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previous]) {
+        NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:kThemeDefaultsKey];
+        if (!([saved isEqualToString:@"light"] || [saved isEqualToString:@"dark"])) {
+            [self applyTheme:[self systemDark]];
+        }
+    }
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // Matches --shell-bg in server/web/assets/app_shell.css, so the status bar
-    // area and the page read as one surface.
-    UIColor *background = [UIColor colorWithRed:11 / 255.0 green:18 / 255.0 blue:32 / 255.0 alpha:1];
-    self.view.backgroundColor = background;
     _helper = [NTHelper new];
 
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
+    NTWeakScriptHandler *themeHandler = [NTWeakScriptHandler new];
+    themeHandler.target = self;
+    [config.userContentController addScriptMessageHandler:themeHandler name:@"nextTraceTheme"];
     _webView = [[WKWebView alloc] initWithFrame:CGRectZero configuration:config];
     _webView.navigationDelegate = self;
     _webView.UIDelegate = self;
     // Behave like an app surface, not a browser page: no white flash, no
     // rubber-banding, no link previews.
     _webView.opaque = NO;
-    _webView.backgroundColor = background;
-    _webView.scrollView.backgroundColor = background;
     _webView.scrollView.bounces = NO;
     _webView.scrollView.showsHorizontalScrollIndicator = NO;
     _webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
@@ -317,7 +384,6 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
     _statusView = [UITextView new];
     _statusView.editable = NO;
     _statusView.backgroundColor = UIColor.clearColor;
-    _statusView.textColor = UIColor.lightGrayColor;
     _statusView.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];
     _statusView.translatesAutoresizingMaskIntoConstraints = NO;
     [_statusView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(ensureRunning)]];
@@ -332,11 +398,14 @@ static const NSUInteger kMaxLogBytes = 16 * 1024;
             [view.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
         ]];
     }
+    NSString *saved = [NSUserDefaults.standardUserDefaults stringForKey:kThemeDefaultsKey];
+    BOOL explicitTheme = [saved isEqualToString:@"light"] || [saved isEqualToString:@"dark"];
+    [self applyTheme:explicitTheme ? [saved isEqualToString:@"dark"] : [self systemDark]];
     [self ensureRunning];
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle {
-    return UIStatusBarStyleLightContent;
+    return _darkTheme ? UIStatusBarStyleLightContent : UIStatusBarStyleDarkContent;
 }
 
 - (void)showStatus:(NSString *)text {
